@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.3
-// @description  Adds some suggestions by bili-開飛機のzm and VR PoZz and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, and a key to make the elevator trim match the aileron pitch.
+// @version      0.4
+// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, and a G-Force Meter.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
 // @match        https://*.geo-fs.com/geofs.php*
@@ -13,18 +13,6 @@ function waitForEntities() {
     try {
         if (window.geofs.cautiousWithTerrain == false) {
             // Entities are already defined, no need to wait
-            /* Set the local storage values ahead of the main function
-            if ((localStorage.getItem("utilsEnabled") == 'null')) { //If utilsEnabled is null, the rest of them are probably also null.
-                localStorage.setItem("utilsEnabled", 'true'); //y
-                localStorage.setItem("utilsSpEnabled", 'true'); //y
-                localStorage.setItem("utilsRtEnabled", 'true'); //y
-                localStorage.getItem("utilsArmed", 'true'); //y
-                localStorage.setItem("utilsArm", 'AltRight'); //y
-                localStorage.setItem("utilsSpExt", '\\'); //y
-                localStorage.setItem("utilsSpRet", '/'); //y
-                localStorage.setItem("utilsLight", "'"); //y
-                localStorage.setItem("utilsTrim", 'w'); //y
-            }*/
             setTimeout(window.mainUtilFn(), 3000);
             return;
         }
@@ -61,6 +49,8 @@ function waitForEntities() {
         utilMenu.addItem("Smoke Start Size: ", "SmokeStart", "number", 1, "0.003");
         utilMenu.addItem("Smoke End Size: ", "SmokeEnd", "number", 1, "0.4");
         utilMenu.addItem("Smoke life span (seconds): ", "SLife", "number", 1, "60");
+        utilMenu.addHeader(2, "G-Force Meter");
+        utilMenu.addItem("Show G-Force Meter: ", "ShowGs", "checkbox", 1, 'false');
     }
     waitForEntities();
     window.smokeParticles = [];
@@ -189,6 +179,70 @@ window.mainUtilFn = function() {
     window.offI = 0.0;
     window.wasGrounded = true;
     window.autoBrakes = true;
+    var s = setInterval(() => {
+        if (localStorage.getItem("utilsShowGs") == 'true' && (!window.instruments.list.gmeter)) {
+            var theUrl = 'https://tylerbmusic.github.io/GPWS-files_geofs/gmeter.png';
+            window.instruments.add(new window.Indicator({
+                container: ".geofs-instruments-container",
+                compositors: "canvas,css",
+                stackX: !0,
+                overlay: {
+                    url: "images/instruments/background.png",
+                    class: "geofs-instrument-background",
+                    size: {
+                        x: 200,
+                        y: 200
+                    },
+                    anchor: {
+                        x: 100,
+                        y: 100
+                    },
+                    position: {
+                        x: 100,
+                        y: 100
+                    },
+                    rescale: !0,
+                    rescalePosition: !0,
+                    overlays: [{
+                        url: theUrl,
+                        anchor: {
+                            x: 100,
+                            y: 100
+                        },
+                        size: {
+                            x: 200,
+                            y: 200
+                        }
+                    }, {
+                        animations: [{
+                            type: "rotate",
+                            value: "accZ",
+                            ratio: -2.25,
+                            max: 180,
+                            min: -30,
+                            offset: 0
+                        }],
+                        url: "images/instruments/airspeed-hand.png",
+                        anchor: {
+                            x: 10,
+                            y: 34
+                        },
+                        size: {
+                            x: 20,
+                            y: 120
+                        },
+                        position: {
+                            x: 0,
+                            y: 0
+                        }
+                    }]
+                }
+            }), 'gmeter');
+        } else if (window.instruments.list.gmeter && localStorage.getItem("utilsShowGs") == 'false') {
+            window.instruments.list.gmeter.overlay.compositorLayer._$element.remove();
+            window.instruments.list.gmeter = undefined;
+        }
+    }, 100);
     function autoBrakes() {
         if (window.geofs.cautiousWithTerrain == false && window.autoBrakes && (window.geofs.animation.values.groundContact && !window.wasGrounded) && (localStorage.getItem("utilsArmed") == "true")) { //Auto brakes
             if (localStorage.getItem("utilsRtEnabled") == 'true') {
