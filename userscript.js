@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.4
-// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, and a G-Force Meter.
+// @version      0.5
+// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, and an AoA meter.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
 // @match        https://*.geo-fs.com/geofs.php*
@@ -22,6 +22,67 @@ function waitForEntities() {
     }
     // Retry after 1000 milliseconds
     setTimeout(() => {waitForEntities();}, 1000);
+}
+//@returns bestAoAMin
+function aoaLookup(id) {
+    switch(id) {
+        case 1:
+            return 6;
+        case 2:
+            return 4;
+        case 3:
+            return 10;
+        case 4:
+            return 6;
+        case 5:
+            return 5;
+        case 6:
+            return 5;
+        case 7:
+            return 10;
+        case 8:
+            return 8;
+        case 9:
+            return 0;
+        case 10:
+            return 6;
+        case 11:
+            return 4;
+        case 12:
+            return 7;
+        case 13:
+            return 8;
+        case 14:
+            return 7;
+        case 15:
+            return 7;
+        case 16:
+            return 7;
+        case 18:
+            return 11;
+        case 20:
+            return 11;
+        case 21:
+            return 8;
+        case 22:
+            return 6;
+        case 23:
+            return 6;
+        case 24:
+            return 6;
+        case 25:
+            return 6;
+        case 26:
+            return 6;
+        case 27:
+            return 12;
+        case 31:
+            return 6;
+        case 40:
+            return 6;
+        default:
+            return 6;
+    }
 }
 (function() {
     if (!window.gmenu || !window.GMenu) {
@@ -49,8 +110,10 @@ function waitForEntities() {
         utilMenu.addItem("Smoke Start Size: ", "SmokeStart", "number", 1, "0.003");
         utilMenu.addItem("Smoke End Size: ", "SmokeEnd", "number", 1, "0.4");
         utilMenu.addItem("Smoke life span (seconds): ", "SLife", "number", 1, "60");
-        utilMenu.addHeader(2, "G-Force Meter");
+        utilMenu.addHeader(2, "G-Force & AoA Meter");
         utilMenu.addItem("Show G-Force Meter: ", "ShowGs", "checkbox", 1, 'false');
+        utilMenu.addItem("Show AoA Meter: ", "ShowAoA", "checkbox", 1, 'false');
+        utilMenu.addItem("Use simplified AoA Meter: ", "SimpleAoA", "checkbox", 1, 'true');
     }
     waitForEntities();
     window.smokeParticles = [];
@@ -241,6 +304,136 @@ window.mainUtilFn = function() {
         } else if (window.instruments.list.gmeter && localStorage.getItem("utilsShowGs") == 'false') {
             window.instruments.list.gmeter.overlay.compositorLayer._$element.remove();
             window.instruments.list.gmeter = undefined;
+        }
+        if (localStorage.getItem("utilsShowAoA") == 'true' && !document.getElementById("aoa-container")) {
+            var d = document.createElement("div");
+            d.style.position = 'fixed';
+            d.style.zIndex = '1000';
+            d.style.top = localStorage.getItem("utilsAoATop") || '10px';
+            d.style.left = localStorage.getItem("utilsAoALeft") || '700px';
+            d.style.background = 'rgba(0,0,0,0.5)';
+            d.id = 'aoa-container';
+
+            if (localStorage.getItem("utilsSimpleAoA") == 'false') {
+                d.style.width = '20%';
+                d.style.height = '100px';
+                document.body.appendChild(d);
+                d.innerHTML = `<div id="aoa-dragger" style="
+    position: absolute;
+    left: 0px;
+    top: -5px;
+    width: 100%;
+    height: 5px;
+    background: gray;
+    cursor: move !important;
+"></div><div id="AoA-Div" style="
+    position: absolute;
+    left: 0;
+    color: white;
+">AoA:</div><div style="position: absolute;left: 50%;width: 20%;background: darkred;border-top: black;border-right: black;border-bottom: black;border-left: 0px black;border-image: initial;border-radius: 0px 10px 10px 0px;" id="criticalAoA"></div><div style="position: absolute; height: 0.1%; background: white; left: 45%; width: 5%;" id="aoaIndicator"></div><div style="
+    position: absolute;
+    left: 50%;
+    width: 1%;
+    height: 100px;
+    background: black;
+    border-radius: 100px;
+"></div><div style="position: absolute;left: 51%;width: 5%;height: 5px;background: blue;border-radius: 0px 20px 20px 0px;border-top: 1px solid black;border-right: 1px solid black;border-bottom: 1px solid black;border-image: initial;border-left: none;" id="AoABlueRange"></div>`;
+                const c = document.getElementById("aoa-container");
+                document.getElementById("aoa-dragger").addEventListener('mousedown', function(e) {
+                    let offsetX = e.clientX - c.getBoundingClientRect().left;
+                    let offsetY = e.clientY - c.getBoundingClientRect().top;
+
+                    function mouseMoveHandler(e) {
+                        c.style.left = `${e.clientX - offsetX}px`;
+                        c.style.top = `${e.clientY - offsetY}px`;
+                    }
+
+                    function mouseUpHandler() {
+                        document.removeEventListener('mousemove', mouseMoveHandler);
+                        document.removeEventListener('mouseup', mouseUpHandler);
+                        localStorage.setItem("utilsAoALeft", c.style.left);
+                        localStorage.setItem("utilsAoATop", c.style.top);
+                    }
+
+                    document.addEventListener('mousemove', mouseMoveHandler);
+                    document.addEventListener('mouseup', mouseUpHandler);
+                });
+
+                setInterval(() => {
+                    window.uAoA = -window.geofs.animation.values.atilt-(Math.atan((window.geofs.animation.values.verticalSpeed*0.00987473)/window.geofs.animation.values.groundSpeedKnt)*window.RAD_TO_DEGREES);
+                    if (window.uAoA) {
+                        document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
+                        document.getElementById("criticalAoA").style.height = (50+window.geofs.aircraft.instance.airfoils[2].stallIncidence*-2.5) + "px";
+                        document.getElementById("aoaIndicator").style.top = (100-(50+Math.max(-50, Math.min(50, (window.uAoA*2.5))))) + "px";
+                        document.getElementById("AoABlueRange").style.top = (50-(aoaLookup(Number(window.geofs.aircraft.instance.id))+2)*2.5) + "px";
+                    }
+                }, 50);
+            } else {
+                d.style.width = '135px';
+                d.style.height = '240px';
+                document.body.appendChild(d);
+                d.innerHTML = `<div id="aoa-dragger" style="
+    position: absolute;
+    left: 0px;
+    top: -5px;
+    width: 100%;
+    height: 5px;
+    background: gray;
+    cursor: move !important;
+"></div><div id="AoA-Div" style="
+    position: absolute;
+    left: 0;
+    color: white;
+">AoA:</div><img id="aoa-img" style="position: absolute; right: 0;" src="https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png">`;
+                const c = document.getElementById("aoa-container");
+                function inRange(val, low, high) {
+                    return ((val >= low) && (val <= high)) ? true : false;
+                }
+
+                setInterval(() => {
+                    c.style.display = (window.instruments.visible) ? 'block' : 'none';
+                    window.uAoA = -window.geofs.animation.values.atilt-(Math.atan((window.geofs.animation.values.verticalSpeed*0.00987473)/window.geofs.animation.values.groundSpeedKnt)*window.RAD_TO_DEGREES);
+                    document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
+                    let i = document.getElementById("aoa-img");
+                    let blue = aoaLookup(Number(window.geofs.aircraft.instance.id));
+                    let crit = window.geofs.aircraft.instance.airfoils[2].stallIncidence;
+                    if (!window.geofs.aircraft.instance.engine.on) {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
+                    } else if (inRange(window.uAoA, 0, blue/2)) {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa1.png";
+                    } else if (inRange(window.uAoA, blue/2, blue)) {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa2.png";
+                    } else if (inRange(window.uAoA, blue, blue+1)) {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa3.png";
+                    } else if (inRange(window.uAoA, blue+1, blue+2)) {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa4.png";
+                    } else if (window.uAoA > blue+2) {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa5.png";
+                    } else {
+                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
+                    }
+                }, 50);
+
+                document.getElementById("aoa-dragger").addEventListener('mousedown', function(e) {
+                    let offsetX = e.clientX - c.getBoundingClientRect().left;
+                    let offsetY = e.clientY - c.getBoundingClientRect().top;
+
+                    function mouseMoveHandler(e) {
+                        c.style.left = `${e.clientX - offsetX}px`;
+                        c.style.top = `${e.clientY - offsetY}px`;
+                    }
+
+                    function mouseUpHandler() {
+                        document.removeEventListener('mousemove', mouseMoveHandler);
+                        document.removeEventListener('mouseup', mouseUpHandler);
+                        localStorage.setItem("utilsAoALeft", c.style.left);
+                        localStorage.setItem("utilsAoATop", c.style.top);
+                    }
+
+                    document.addEventListener('mousemove', mouseMoveHandler);
+                    document.addEventListener('mouseup', mouseUpHandler);
+                });
+            }
         }
     }, 100);
     function autoBrakes() {
