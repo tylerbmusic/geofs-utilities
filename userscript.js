@@ -1,18 +1,23 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.5.1
+// @version      0.5.2
 // @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, and an AoA meter.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
 // @match        https://*.geo-fs.com/geofs.php*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=geo-fs.com
 // @grant        none
+// @downloadURL  https://github.com/tylerbmusic/geofs-utilities/raw/refs/heads/main/userscript.js
+// @updateURL    https://github.com/tylerbmusic/geofs-utilities/raw/refs/heads/main/userscript.js
 // ==/UserScript==
 //Note: between 6:20 and 17:52 (exclusive), the light is not visible.
 function waitForEntities() {
     try {
         if (window.geofs.cautiousWithTerrain == false) {
             // Entities are already defined, no need to wait
+            window.DEGREES_TO_RAD = window.DEGREES_TO_RAD || 0.017453292519943295769236907684886127134428718885417254560971914401710091146034494436822415696345094822123044925073790592483854692275281012398474218934047117319168245015010769561697553581238605305168789;
+            window.RAD_TO_DEGREES = window.RAD_TO_DEGREES || 57.295779513082320876798154814105170332405472466564321549160243861202847148321552632440968995851110944186223381632864893281448264601248315036068267863411942122526388097467267926307988702893110767938261;
+            window.METERS_TO_FEET = window.METERS_TO_FEET || 3.280839895;
             setTimeout(window.mainUtilFn(), 3000);
             return;
         }
@@ -114,6 +119,9 @@ function aoaLookup(id) {
         utilMenu.addItem("Show G-Force Meter: ", "ShowGs", "checkbox", 1, 'false');
         utilMenu.addItem("Show AoA Meter: ", "ShowAoA", "checkbox", 1, 'false');
         utilMenu.addItem("Use simplified AoA Meter: ", "SimpleAoA", "checkbox", 1, 'true');
+        utilMenu.addHeader(2, "Camera settings");
+        utilMenu.addItem("Reset cam when mouse button released: ", "CamReset", "checkbox", 1, 'false');
+        utilMenu.addItem("Cam reset time (seconds): ", "CamResetTime", "number", 1, "1");
     }
     waitForEntities();
     window.smokeParticles = [];
@@ -232,7 +240,6 @@ function aoaLookup(id) {
             }
         }
     }
-
 })();
 
 window.mainUtilFn = function() {
@@ -242,6 +249,7 @@ window.mainUtilFn = function() {
     window.offI = 0.0;
     window.wasGrounded = true;
     window.autoBrakes = true;
+    window.isCamReset = false;
     var s = setInterval(() => {
         if (localStorage.getItem("utilsShowGs") == 'true' && (!window.instruments.list.gmeter)) {
             var theUrl = 'https://tylerbmusic.github.io/GPWS-files_geofs/gmeter.png';
@@ -397,7 +405,7 @@ window.mainUtilFn = function() {
                     document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
                     let i = document.getElementById("aoa-img");
                     let blue = aoaLookup(Number(window.geofs.aircraft.instance.id));
-                    let crit = window.geofs.aircraft.instance.airfoils[2].stallIncidence;
+                    let crit = (window.geofs.aircraft.instance.airfoils[2] && window.geofs.aircraft.instance.airfoils[2].stallIncidence);
                     if (!window.geofs.aircraft.instance.engine.on) {
                         i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
                     } else if (inRange(window.uAoA, 0, blue/2)) {
@@ -436,9 +444,43 @@ window.mainUtilFn = function() {
                 });
             }
         }
+        if (!window.isCamReset && localStorage.getItem("utilsCamReset") == 'true') {
+            window.isCamReset = true;
+            window.utilsCameraTick = function() {
+                if (window.geofs.camera.currentMode != 5) {
+                    let time = Number(localStorage.getItem("utilsCamResetTime"))*1000;
+                    let fTime = Date.now()+time;
+                    let fac = Math.min(1-(fTime-Date.now())/time, 1);
+                    let f;
+                    let cO;
+                    let nO;
+                    let cP;
+                    let nP;
+                    function theTick () {
+                        fac = Math.min(1-(fTime-Date.now())/time, 1);
+                        f = Math.pow(Math.sin((Math.PI/2)*fac), 2); //Sin(Pi/2*fac)^2 makes transition smooth
+                        cO = window.geofs.camera.currentDefinition.orientations.current;
+                        nO = window.geofs.camera.currentDefinition.orientations.neutral;
+                        cP = window.geofs.camera.currentDefinition.offsets.current;
+                        nP = window.geofs.camera.currentDefinition.offsets.neutral;
+                        for (var i = 0; i < 3; i++) {
+                            window.geofs.camera.currentDefinition.orientations.current[i] = cO[i] + (nO[i] - cO[i])*f;
+                            window.geofs.camera.currentDefinition.offsets.current[i] = cP[i] + (nP[i] - cP[i])*f;
+                        }
+                        if (fac < 1) {
+                            setTimeout(theTick,10);
+                        }
+                    }
+                    theTick();
+                }
+            }
+            document.getElementById("geofs-ui-3dview").addEventListener('mouseup', window.utilsCameraTick);
+        } else if (window.isCamReset && localStorage.getItem("utilsCamReset") == 'false') {
+            document.getElementById("geofs-ui-3dview").removeEventListener('mouseup',window.utilsCameraTick);
+        }
     }, 100);
     function autoBrakes() {
-        if (window.geofs.cautiousWithTerrain == false && window.autoBrakes && (window.geofs.animation.values.groundContact && !window.wasGrounded) && (localStorage.getItem("utilsArmed") == "true")) { //Auto brakes
+        if ((localStorage.getItem("utilsArmed") == "true") && window.geofs.cautiousWithTerrain == false && window.autoBrakes && (window.geofs.animation.values.groundContact && !window.wasGrounded)) { //Auto brakes
             if (localStorage.getItem("utilsRtEnabled") == 'true') {
                 window.controls.throttle = -1;
             }
