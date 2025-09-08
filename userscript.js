@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.5.2
+// @version      0.5.3
 // @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, and an AoA meter.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
@@ -95,7 +95,7 @@ function aoaLookup(id) {
             .then(response => response.text())
             .then(script => {eval(script);})
             .then(() => {setTimeout(afterGMenu, 100);});
-    }
+    } else afterGMenu()
     function afterGMenu() {
         window.isSmokeOn = false;
         const utilMenu = new window.GMenu("Utilities", "utils");
