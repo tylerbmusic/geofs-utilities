@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.5.3
-// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, and an AoA meter.
+// @version      0.6
+// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, GTAIV, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, an AoA meter, and some camera enhancements.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
 // @match        https://*.geo-fs.com/geofs.php*
@@ -12,18 +12,13 @@
 // ==/UserScript==
 //Note: between 6:20 and 17:52 (exclusive), the light is not visible.
 function waitForEntities() {
-    try {
-        if (window.geofs.cautiousWithTerrain == false) {
-            // Entities are already defined, no need to wait
-            window.DEGREES_TO_RAD = window.DEGREES_TO_RAD || 0.017453292519943295769236907684886127134428718885417254560971914401710091146034494436822415696345094822123044925073790592483854692275281012398474218934047117319168245015010769561697553581238605305168789;
-            window.RAD_TO_DEGREES = window.RAD_TO_DEGREES || 57.295779513082320876798154814105170332405472466564321549160243861202847148321552632440968995851110944186223381632864893281448264601248315036068267863411942122526388097467267926307988702893110767938261;
-            window.METERS_TO_FEET = window.METERS_TO_FEET || 3.280839895;
-            setTimeout(window.mainUtilFn(), 3000);
-            return;
-        }
-    } catch (error) {
-        // Handle any errors (e.g., log them)
-        console.log('Error in waitForEntities:', error);
+    if (window.geofs.cautiousWithTerrain == false) {
+        // Entities are already defined, no need to wait
+        window.DEGREES_TO_RAD = window.DEGREES_TO_RAD || 0.017453292519943295769236907684886127134428718885417254560971914401710091146034494436822415696345094822123044925073790592483854692275281012398474218934047117319168245015010769561697553581238605305168789;
+        window.RAD_TO_DEGREES = window.RAD_TO_DEGREES || 57.295779513082320876798154814105170332405472466564321549160243861202847148321552632440968995851110944186223381632864893281448264601248315036068267863411942122526388097467267926307988702893110767938261;
+        window.METERS_TO_FEET = window.METERS_TO_FEET || 3.280839895;
+        setTimeout(window.mainUtilFn(), 3000);
+        return;
     }
     // Retry after 1000 milliseconds
     setTimeout(() => {waitForEntities();}, 1000);
@@ -98,6 +93,7 @@ function aoaLookup(id) {
     } else afterGMenu()
     function afterGMenu() {
         window.isSmokeOn = false;
+        //GMenu stuff
         const utilMenu = new window.GMenu("Utilities", "utils");
         utilMenu.addHeader(2, "Individual Utility Settings");
         utilMenu.addItem("Spoilers Enabled: ", "SpEnabled", "checkbox", 1, 'true');
@@ -122,6 +118,68 @@ function aoaLookup(id) {
         utilMenu.addHeader(2, "Camera settings");
         utilMenu.addItem("Reset cam when mouse button released: ", "CamReset", "checkbox", 1, 'false');
         utilMenu.addItem("Cam reset time (seconds): ", "CamResetTime", "number", 1, "1");
+        utilMenu.addItem("Mouse movement rotates camera automatically: ", "Mouseless", "checkbox", 1, 'false');
+        utilMenu.addNote("Allows you to rotate the camera without clicking the mouse button. Requires 'Reset cam when mouse button released' to be disabled");
+        utilMenu.addItem("Mouse movement rotation reset delay (seconds): ", "MouselessDelay", "number", 1, "3");
+        utilMenu.addNote("How many seconds of mouse inactivity before the camera's view resets");
+        //Update notification
+        async function checkForUpdates() {
+            let NAME = "Utilities";
+            let SPACEDNAME = "Utilities";
+            let LSNAME = "utils";
+            let VERSION = "0.6";
+            let URL = "https://github.com/tylerbmusic/GeoFS-utilities";
+            let a = await fetch('https://tylerbmusic.github.io/versions.json')
+            let b = await a.text();
+            let newversion = JSON.parse(b)[NAME];
+            if (newversion !== VERSION && localStorage.getItem(LSNAME + "StopU" + newversion) !== "true") {
+                if (confirm(`A new update for ${SPACEDNAME} is available at ${URL}\nCurrent version: v${VERSION}; New version: v${newversion}\nPress "OK" to copy URL, or "Cancel" to skip this update.`)) {
+                    await navigator.clipboard.writeText(URL);
+                    console.log("COPIED " + URL + " TO CLIPBOARD");
+                } else {
+                    localStorage.setItem(LSNAME + "StopU" + newversion, true);
+                }
+            }
+        }
+        checkForUpdates();
+
+        //ANONYMOUS TRACKING VIA CLOUDFLARE (I will never sell your data.)
+        //What's being tracked: For each script, how many hits (page loads) it's had in the last 24 hours, how many total hits in the last 30 days, and how many unique users there are.
+        //Why it's being tracked: I am curious to know how many people are using my addons.
+        //To see the data, go to https://track.tylerbialowas-bard.workers.dev in a web browser.
+
+        async function track() {
+            if (true) { //To opt out of anonymous tracking, change the word "true" in this line to "false".
+                const SCRIPT_NAME = "GPWS_Callouts";
+
+                // Generate persistent ID
+                let userId = localStorage.getItem("myScriptUserId");
+
+                if (!userId) {
+                    userId = crypto.randomUUID();
+                    localStorage.setItem("myScriptUserId", userId);
+                }
+                try {
+                    const response = await fetch("https://track.tylerbialowas-bard.workers.dev", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            script: SCRIPT_NAME,
+                            userId: userId
+                        }),
+                    });
+
+                    if (response.ok) {
+                        console.log("Analytics event sent successfully");
+                    }
+                } catch (error) {
+                    console.error("Failed to track event:", error);
+                }
+            }
+        }
+        track();
     }
     waitForEntities();
     window.smokeParticles = [];
@@ -242,6 +300,56 @@ function aoaLookup(id) {
     }
 })();
 
+window.utilsCameraTick = function() {
+    if (window.geofs.camera.currentMode != 5) {
+        console.log("utilsCameraTick");
+        window.mouselessTimeout = null;
+        window.utilsCameraTicking = true;
+        let time = Number(localStorage.getItem("utilsCamResetTime"))*1000;
+        let fTime = Date.now()+time;
+        let fac = Math.min(1-(fTime-Date.now())/time, 1);
+        let f;
+        let cO;
+        let nO;
+        let cP;
+        let nP;
+        function theTick() {
+            fac = Math.min(1-(fTime-Date.now())/time, 1);
+            f = Math.pow(Math.sin((Math.PI/2)*fac), 2); //Sin(Pi/2*fac)^2 makes transition smooth
+            cO = window.geofs.camera.currentDefinition.orientations.current;
+            nO = window.geofs.camera.currentDefinition.orientations.neutral;
+            cP = window.geofs.camera.currentDefinition.offsets.current;
+            nP = window.geofs.camera.currentDefinition.offsets.neutral;
+            for (var i = 0; i < 3; i++) {
+                window.geofs.camera.currentDefinition.orientations.current[i] = cO[i] + (nO[i] - cO[i])*f;
+                window.geofs.camera.currentDefinition.offsets.current[i] = cP[i] + (nP[i] - cP[i])*f;
+            }
+            if (fac < 1 && !window.stopCamReset) {
+                setTimeout(theTick,10);
+            } else if (window.stopCamReset) {
+                window.utilsCameraTicking = false;
+                window.stopCamReset = false;
+            } else {
+                window.utilsCameraTicking = false;
+            }
+        }
+        theTick();
+    }
+}
+window.utilsMouseless = function() { //Called every time the mouse is moved
+    if (window.mouselessTimeout) {
+        window.controls.mouse.down = 1;
+        clearTimeout(window.mouselessTimeout);
+        window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
+    } else {
+        if (window.utilsCameraTicking) {
+            window.stopCamReset = true; //Stop the camera from resetting if the mouse is moved
+        }
+        window.controls.mouse.down = 1;
+        window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
+    }
+};
+
 window.mainUtilFn = function() {
     'use strict';
     window.isLightOn = false;
@@ -250,6 +358,10 @@ window.mainUtilFn = function() {
     window.wasGrounded = true;
     window.autoBrakes = true;
     window.isCamReset = false;
+    window.stopCamReset = false;
+    window.utilsCameraTicking = false;
+    window.mouselessTimeout = null;
+    window.mouselessListener = false;
     var s = setInterval(() => {
         if (localStorage.getItem("utilsShowGs") == 'true' && (!window.instruments.list.gmeter)) {
             var theUrl = 'https://tylerbmusic.github.io/GPWS-files_geofs/gmeter.png';
@@ -446,37 +558,22 @@ window.mainUtilFn = function() {
         }
         if (!window.isCamReset && localStorage.getItem("utilsCamReset") == 'true') {
             window.isCamReset = true;
-            window.utilsCameraTick = function() {
-                if (window.geofs.camera.currentMode != 5) {
-                    let time = Number(localStorage.getItem("utilsCamResetTime"))*1000;
-                    let fTime = Date.now()+time;
-                    let fac = Math.min(1-(fTime-Date.now())/time, 1);
-                    let f;
-                    let cO;
-                    let nO;
-                    let cP;
-                    let nP;
-                    function theTick () {
-                        fac = Math.min(1-(fTime-Date.now())/time, 1);
-                        f = Math.pow(Math.sin((Math.PI/2)*fac), 2); //Sin(Pi/2*fac)^2 makes transition smooth
-                        cO = window.geofs.camera.currentDefinition.orientations.current;
-                        nO = window.geofs.camera.currentDefinition.orientations.neutral;
-                        cP = window.geofs.camera.currentDefinition.offsets.current;
-                        nP = window.geofs.camera.currentDefinition.offsets.neutral;
-                        for (var i = 0; i < 3; i++) {
-                            window.geofs.camera.currentDefinition.orientations.current[i] = cO[i] + (nO[i] - cO[i])*f;
-                            window.geofs.camera.currentDefinition.offsets.current[i] = cP[i] + (nP[i] - cP[i])*f;
-                        }
-                        if (fac < 1) {
-                            setTimeout(theTick,10);
-                        }
-                    }
-                    theTick();
-                }
-            }
             document.getElementById("geofs-ui-3dview").addEventListener('mouseup', window.utilsCameraTick);
         } else if (window.isCamReset && localStorage.getItem("utilsCamReset") == 'false') {
             document.getElementById("geofs-ui-3dview").removeEventListener('mouseup',window.utilsCameraTick);
+        }
+        if (!window.mouselessListener && window.geofs.camera.isHandlingMouseRotation() && localStorage.getItem("utilsMouseless") == "true" && localStorage.getItem("utilsCamReset") == "false") { //Activate "Mouseless" mode. Also, Cam Reset being enabled may (or may not) cause unexpected things to happen.
+            window.controls.mouse.down = 1;
+            window.mouselessListener = true;
+            document.body.addEventListener('mousemove', window.utilsMouseless);
+        } else if (window.mouselessListener && (!window.geofs.camera.isHandlingMouseRotation() || localStorage.getItem("utilsMouseless") == "false" || localStorage.getItem("utilsCamReset") == "true")) { //Deactivate "Mouseless" mode.
+            if (window.mouselessTimeout) {
+                clearTimeout(window.mouselessTimeout);
+                window.mouselessTimeout = null;
+            }
+            window.controls.mouse.down = false;
+            document.body.removeEventListener('mousemove', window.utilsMouseless);
+            window.mouselessListener = false;
         }
     }, 100);
     function autoBrakes() {
