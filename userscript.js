@@ -150,7 +150,7 @@ function aoaLookup(id) {
 
         async function track() {
             if (true) { //To opt out of anonymous tracking, change the word "true" in this line to "false".
-                const SCRIPT_NAME = "GPWS_Callouts";
+                const SCRIPT_NAME = "Utilities";
 
                 // Generate persistent ID
                 let userId = localStorage.getItem("myScriptUserId");
