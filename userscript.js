@@ -131,13 +131,17 @@ function aoaLookup(id) {
             let LSNAME = "utils";
             let VERSION = "0.7";
             let URL = "https://github.com/tylerbmusic/geofs-utilities";
-            let a = await fetch('https://tylerbmusic.github.io/versions.json')
+            let a = await fetch('https://tylerbmusic.github.io/versions.json?t=' + Date.now());
             let b = await a.text();
             let newversion = JSON.parse(b)[NAME];
+            if (localStorage.getItem(LSNAME + "U" + VERSION) !== "true") { //Send an event upon updating (update data not available to the public)
+                localStorage.setItem(LSNAME + "U" + VERSION, "true");
+                await fetch(`https://track.tylerbialowas-bard.workers.dev?event=${LSNAME}v${VERSION}`, {method: "HEAD"});
+            }
             if (newversion !== VERSION && localStorage.getItem(LSNAME + "StopU" + newversion) !== "true") {
-                if (confirm(`A new update for ${SPACEDNAME} is available at ${URL}\nCurrent version: v${VERSION}; New version: v${newversion}\nPress "OK" to copy URL, or "Cancel" to skip this update.`)) {
-                    await navigator.clipboard.writeText(URL);
-                    console.log("COPIED " + URL + " TO CLIPBOARD");
+                if (confirm(`A new update for ${SPACEDNAME} is available at ${URL}\nCurrent version: v${VERSION}; New version: v${newversion}\nPress "OK" open update URL in new tab, or "Cancel" to skip this update.`)) {
+                    window.open(URL);
+                    console.log("OPENING " + URL);
                 } else {
                     localStorage.setItem(LSNAME + "StopU" + newversion, true);
                 }
