@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.6
+// @version      0.7
 // @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, GTAIV, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, an AoA meter, and some camera enhancements.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
@@ -95,12 +95,14 @@ function aoaLookup(id) {
         window.isSmokeOn = false;
         //GMenu stuff
         const utilMenu = new window.GMenu("Utilities", "utils");
-        utilMenu.addHeader(2, "Individual Utility Settings");
+        utilMenu.addHeader(2, "Autobrakes");
+        utilMenu.addItem("Brakes Enabled: ", "BkEnabled", "checkbox", 1, 'true');
         utilMenu.addItem("Spoilers Enabled: ", "SpEnabled", "checkbox", 1, 'true');
         utilMenu.addItem("Reverse Thrust Enabled: ", "RtEnabled", "checkbox", 1, 'true');
-        utilMenu.addItem("Spoilers Armed: ", "Armed", "checkbox", 1, 'true');
+        utilMenu.addItem("Autobrakes Armed: ", "Armed", "checkbox", 1, 'false');
+        utilMenu.addItem('Show Autobrakes Arming In Control Pads: ', "AB-CP", "checkbox", 1, 'true'); //AB-CP = AutoBrakes-ControlPad
         utilMenu.addHeader(2, "Keybinds");
-        utilMenu.addKBShortcut("Arm/Disarm Spoilers: ", "Arm", 1, "AltRight", spArm);
+        utilMenu.addKBShortcut("Arm/Disarm Autobrakes: ", "Arm", 1, "AltRight", spArm);
         utilMenu.addKBShortcut("Extend Spoilers 10%: ", "SpExt", 1, '\\', spExt);
         utilMenu.addKBShortcut("Retract Spoilers 10%: ", "SpRet", 1, '/', spRet);
         utilMenu.addKBShortcut("Toggle light: ", "Light", 1, "'", light);
@@ -127,8 +129,8 @@ function aoaLookup(id) {
             let NAME = "Utilities";
             let SPACEDNAME = "Utilities";
             let LSNAME = "utils";
-            let VERSION = "0.6";
-            let URL = "https://github.com/tylerbmusic/GeoFS-utilities";
+            let VERSION = "0.7";
+            let URL = "https://github.com/tylerbmusic/geofs-utilities";
             let a = await fetch('https://tylerbmusic.github.io/versions.json')
             let b = await a.text();
             let newversion = JSON.parse(b)[NAME];
@@ -187,9 +189,15 @@ function aoaLookup(id) {
     function spArm() {
         if ((localStorage.getItem("utilsEnabled") == 'true')) {
             if (localStorage.getItem("utilsArmed") == "true") {
+                if (document.getElementById("utils-ab")) {
+                    document.getElementById("utils-ab").style.backgroundColor = "#000";
+                }
                 localStorage.setItem("utilsArmed", "false");
                 document.getElementById("utilsArmed").checked = false;
             } else {
+                if (document.getElementById("utils-ab")) {
+                    document.getElementById("utils-ab").style.backgroundColor = "orange";
+                }
                 localStorage.setItem("utilsArmed", "true");
                 document.getElementById("utilsArmed").checked = true;
             }
@@ -298,148 +306,148 @@ function aoaLookup(id) {
             }
         }
     }
-})();
 
-window.utilsCameraTick = function() {
-    if (window.geofs.camera.currentMode != 5) {
-        console.log("utilsCameraTick");
+    window.utilsCameraTick = function() {
+        if (window.geofs.camera.currentMode != 5) {
+            console.log("utilsCameraTick");
+            window.mouselessTimeout = null;
+            window.utilsCameraTicking = true;
+            let time = Number(localStorage.getItem("utilsCamResetTime"))*1000;
+            let fTime = Date.now()+time;
+            let fac = Math.min(1-(fTime-Date.now())/time, 1);
+            let f;
+            let cO;
+            let nO;
+            let cP;
+            let nP;
+            function theTick() {
+                fac = Math.min(1-(fTime-Date.now())/time, 1);
+                f = Math.pow(Math.sin((Math.PI/2)*fac), 2); //Sin(Pi/2*fac)^2 makes transition smooth
+                cO = window.geofs.camera.currentDefinition.orientations.current;
+                nO = window.geofs.camera.currentDefinition.orientations.neutral;
+                cP = window.geofs.camera.currentDefinition.offsets.current;
+                nP = window.geofs.camera.currentDefinition.offsets.neutral;
+                for (var i = 0; i < 3; i++) {
+                    window.geofs.camera.currentDefinition.orientations.current[i] = cO[i] + (nO[i] - cO[i])*f;
+                    window.geofs.camera.currentDefinition.offsets.current[i] = cP[i] + (nP[i] - cP[i])*f;
+                }
+                if (fac < 1 && !window.stopCamReset) {
+                    setTimeout(theTick,10);
+                } else if (window.stopCamReset) {
+                    window.utilsCameraTicking = false;
+                    window.stopCamReset = false;
+                } else {
+                    window.utilsCameraTicking = false;
+                }
+            }
+            theTick();
+        }
+    }
+    window.utilsMouseless = function() { //Called every time the mouse is moved
+        if (window.mouselessTimeout) {
+            window.controls.mouse.down = 1;
+            clearTimeout(window.mouselessTimeout);
+            window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
+        } else {
+            if (window.utilsCameraTicking) {
+                window.stopCamReset = true; //Stop the camera from resetting if the mouse is moved
+            }
+            window.controls.mouse.down = 1;
+            window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
+        }
+    };
+
+    window.mainUtilFn = function() {
+        'use strict';
+        window.isLightOn = false;
+        window.isLight = false;
+        window.offI = 0.0;
+        window.wasGrounded = true;
+        window.autoBrakes = true;
+        window.isCamReset = false;
+        window.stopCamReset = false;
+        window.utilsCameraTicking = false;
         window.mouselessTimeout = null;
-        window.utilsCameraTicking = true;
-        let time = Number(localStorage.getItem("utilsCamResetTime"))*1000;
-        let fTime = Date.now()+time;
-        let fac = Math.min(1-(fTime-Date.now())/time, 1);
-        let f;
-        let cO;
-        let nO;
-        let cP;
-        let nP;
-        function theTick() {
-            fac = Math.min(1-(fTime-Date.now())/time, 1);
-            f = Math.pow(Math.sin((Math.PI/2)*fac), 2); //Sin(Pi/2*fac)^2 makes transition smooth
-            cO = window.geofs.camera.currentDefinition.orientations.current;
-            nO = window.geofs.camera.currentDefinition.orientations.neutral;
-            cP = window.geofs.camera.currentDefinition.offsets.current;
-            nP = window.geofs.camera.currentDefinition.offsets.neutral;
-            for (var i = 0; i < 3; i++) {
-                window.geofs.camera.currentDefinition.orientations.current[i] = cO[i] + (nO[i] - cO[i])*f;
-                window.geofs.camera.currentDefinition.offsets.current[i] = cP[i] + (nP[i] - cP[i])*f;
-            }
-            if (fac < 1 && !window.stopCamReset) {
-                setTimeout(theTick,10);
-            } else if (window.stopCamReset) {
-                window.utilsCameraTicking = false;
-                window.stopCamReset = false;
-            } else {
-                window.utilsCameraTicking = false;
-            }
-        }
-        theTick();
-    }
-}
-window.utilsMouseless = function() { //Called every time the mouse is moved
-    if (window.mouselessTimeout) {
-        window.controls.mouse.down = 1;
-        clearTimeout(window.mouselessTimeout);
-        window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
-    } else {
-        if (window.utilsCameraTicking) {
-            window.stopCamReset = true; //Stop the camera from resetting if the mouse is moved
-        }
-        window.controls.mouse.down = 1;
-        window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
-    }
-};
-
-window.mainUtilFn = function() {
-    'use strict';
-    window.isLightOn = false;
-    window.isLight = false;
-    window.offI = 0.0;
-    window.wasGrounded = true;
-    window.autoBrakes = true;
-    window.isCamReset = false;
-    window.stopCamReset = false;
-    window.utilsCameraTicking = false;
-    window.mouselessTimeout = null;
-    window.mouselessListener = false;
-    var s = setInterval(() => {
-        if (localStorage.getItem("utilsShowGs") == 'true' && (!window.instruments.list.gmeter)) {
-            var theUrl = 'https://tylerbmusic.github.io/GPWS-files_geofs/gmeter.png';
-            window.instruments.add(new window.Indicator({
-                container: ".geofs-instruments-container",
-                compositors: "canvas,css",
-                stackX: !0,
-                overlay: {
-                    url: "images/instruments/background.png",
-                    class: "geofs-instrument-background",
-                    size: {
-                        x: 200,
-                        y: 200
-                    },
-                    anchor: {
-                        x: 100,
-                        y: 100
-                    },
-                    position: {
-                        x: 100,
-                        y: 100
-                    },
-                    rescale: !0,
-                    rescalePosition: !0,
-                    overlays: [{
-                        url: theUrl,
+        window.mouselessListener = false;
+        var s = setInterval(() => {
+            if (localStorage.getItem("utilsShowGs") == 'true' && (!window.instruments.list.gmeter)) {
+                var theUrl = 'https://tylerbmusic.github.io/GPWS-files_geofs/gmeter.png';
+                window.instruments.add(new window.Indicator({
+                    container: ".geofs-instruments-container",
+                    compositors: "canvas,css",
+                    stackX: !0,
+                    overlay: {
+                        url: "images/instruments/background.png",
+                        class: "geofs-instrument-background",
+                        size: {
+                            x: 200,
+                            y: 200
+                        },
                         anchor: {
                             x: 100,
                             y: 100
                         },
-                        size: {
-                            x: 200,
-                            y: 200
-                        }
-                    }, {
-                        animations: [{
-                            type: "rotate",
-                            value: "accZ",
-                            ratio: -2.25,
-                            max: 180,
-                            min: -30,
-                            offset: 0
-                        }],
-                        url: "images/instruments/airspeed-hand.png",
-                        anchor: {
-                            x: 10,
-                            y: 34
-                        },
-                        size: {
-                            x: 20,
-                            y: 120
-                        },
                         position: {
-                            x: 0,
-                            y: 0
-                        }
-                    }]
-                }
-            }), 'gmeter');
-        } else if (window.instruments.list.gmeter && localStorage.getItem("utilsShowGs") == 'false') {
-            window.instruments.list.gmeter.overlay.compositorLayer._$element.style.display = 'none !important';
-            window.instruments.list.gmeter.overlay.compositorLayer._$element.style.visibility = 'hidden !important';
-            window.instruments.list.gmeter.destroy();
-        }
-        if (localStorage.getItem("utilsShowAoA") == 'true' && !document.getElementById("aoa-container")) {
-            var d = document.createElement("div");
-            d.style.position = 'fixed';
-            d.style.zIndex = '1000';
-            d.style.top = localStorage.getItem("utilsAoATop") || '10px';
-            d.style.left = localStorage.getItem("utilsAoALeft") || '700px';
-            d.style.background = 'rgba(0,0,0,0.5)';
-            d.id = 'aoa-container';
+                            x: 100,
+                            y: 100
+                        },
+                        rescale: !0,
+                        rescalePosition: !0,
+                        overlays: [{
+                            url: theUrl,
+                            anchor: {
+                                x: 100,
+                                y: 100
+                            },
+                            size: {
+                                x: 200,
+                                y: 200
+                            }
+                        }, {
+                            animations: [{
+                                type: "rotate",
+                                value: "accZ",
+                                ratio: -2.25,
+                                max: 180,
+                                min: -30,
+                                offset: 0
+                            }],
+                            url: "images/instruments/airspeed-hand.png",
+                            anchor: {
+                                x: 10,
+                                y: 34
+                            },
+                            size: {
+                                x: 20,
+                                y: 120
+                            },
+                            position: {
+                                x: 0,
+                                y: 0
+                            }
+                        }]
+                    }
+                }), 'gmeter');
+            } else if (window.instruments.list.gmeter && localStorage.getItem("utilsShowGs") == 'false') {
+                window.instruments.list.gmeter.overlay.compositorLayer._$element[0].style.display = 'none !important';
+                window.instruments.list.gmeter.overlay.compositorLayer._$element[0].style.visibility = 'hidden !important';
+                window.instruments.list.gmeter.destroy();
+                window.instruments.list.gmeter = undefined;
+            }
+            if (localStorage.getItem("utilsShowAoA") == 'true' && !document.getElementById("aoa-container")) {
+                var d = document.createElement("div");
+                d.style.position = 'fixed';
+                d.style.zIndex = '1000';
+                d.style.top = localStorage.getItem("utilsAoATop") || '10px';
+                d.style.left = localStorage.getItem("utilsAoALeft") || '700px';
+                d.style.background = 'rgba(0,0,0,0.5)';
+                d.id = 'aoa-container';
 
-            if (localStorage.getItem("utilsSimpleAoA") == 'false') {
-                d.style.width = '20%';
-                d.style.height = '100px';
-                document.body.appendChild(d);
-                d.innerHTML = `<div id="aoa-dragger" style="
+                if (localStorage.getItem("utilsSimpleAoA") == 'false') {
+                    d.style.width = '20%';
+                    d.style.height = '100px';
+                    document.body.appendChild(d);
+                    d.innerHTML = `<div id="aoa-dragger" style="
     position: absolute;
     left: 0px;
     top: -5px;
@@ -459,41 +467,41 @@ window.mainUtilFn = function() {
     background: black;
     border-radius: 100px;
 "></div><div style="position: absolute;left: 51%;width: 5%;height: 5px;background: blue;border-radius: 0px 20px 20px 0px;border-top: 1px solid black;border-right: 1px solid black;border-bottom: 1px solid black;border-image: initial;border-left: none;" id="AoABlueRange"></div>`;
-                const c = document.getElementById("aoa-container");
-                document.getElementById("aoa-dragger").addEventListener('mousedown', function(e) {
-                    let offsetX = e.clientX - c.getBoundingClientRect().left;
-                    let offsetY = e.clientY - c.getBoundingClientRect().top;
+                    const c = document.getElementById("aoa-container");
+                    document.getElementById("aoa-dragger").addEventListener('mousedown', function(e) {
+                        let offsetX = e.clientX - c.getBoundingClientRect().left;
+                        let offsetY = e.clientY - c.getBoundingClientRect().top;
 
-                    function mouseMoveHandler(e) {
-                        c.style.left = `${e.clientX - offsetX}px`;
-                        c.style.top = `${e.clientY - offsetY}px`;
-                    }
+                        function mouseMoveHandler(e) {
+                            c.style.left = `${e.clientX - offsetX}px`;
+                            c.style.top = `${e.clientY - offsetY}px`;
+                        }
 
-                    function mouseUpHandler() {
-                        document.removeEventListener('mousemove', mouseMoveHandler);
-                        document.removeEventListener('mouseup', mouseUpHandler);
-                        localStorage.setItem("utilsAoALeft", c.style.left);
-                        localStorage.setItem("utilsAoATop", c.style.top);
-                    }
+                        function mouseUpHandler() {
+                            document.removeEventListener('mousemove', mouseMoveHandler);
+                            document.removeEventListener('mouseup', mouseUpHandler);
+                            localStorage.setItem("utilsAoALeft", c.style.left);
+                            localStorage.setItem("utilsAoATop", c.style.top);
+                        }
 
-                    document.addEventListener('mousemove', mouseMoveHandler);
-                    document.addEventListener('mouseup', mouseUpHandler);
-                });
+                        document.addEventListener('mousemove', mouseMoveHandler);
+                        document.addEventListener('mouseup', mouseUpHandler);
+                    });
 
-                setInterval(() => {
-                    window.uAoA = -window.geofs.animation.values.atilt-(Math.atan((window.geofs.animation.values.verticalSpeed*0.00987473)/window.geofs.animation.values.groundSpeedKnt)*window.RAD_TO_DEGREES);
-                    if (window.uAoA) {
-                        document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
-                        document.getElementById("criticalAoA").style.height = (50+window.geofs.aircraft.instance.airfoils[2].stallIncidence*-2.5) + "px";
-                        document.getElementById("aoaIndicator").style.top = (100-(50+Math.max(-50, Math.min(50, (window.uAoA*2.5))))) + "px";
-                        document.getElementById("AoABlueRange").style.top = (50-(aoaLookup(Number(window.geofs.aircraft.instance.id))+2)*2.5) + "px";
-                    }
-                }, 50);
-            } else {
-                d.style.width = '135px';
-                d.style.height = '240px';
-                document.body.appendChild(d);
-                d.innerHTML = `<div id="aoa-dragger" style="
+                    setInterval(() => {
+                        window.uAoA = -window.geofs.animation.values.atilt-(Math.atan((window.geofs.animation.values.verticalSpeed*0.00987473)/window.geofs.animation.values.groundSpeedKnt)*window.RAD_TO_DEGREES);
+                        if (window.uAoA) {
+                            document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
+                            document.getElementById("criticalAoA").style.height = (50+window.geofs.aircraft.instance.airfoils[2].stallIncidence*-2.5) + "px";
+                            document.getElementById("aoaIndicator").style.top = (100-(50+Math.max(-50, Math.min(50, (window.uAoA*2.5))))) + "px";
+                            document.getElementById("AoABlueRange").style.top = (50-(aoaLookup(Number(window.geofs.aircraft.instance.id))+2)*2.5) + "px";
+                        }
+                    }, 50);
+                } else {
+                    d.style.width = '135px';
+                    d.style.height = '240px';
+                    document.body.appendChild(d);
+                    d.innerHTML = `<div id="aoa-dragger" style="
     position: absolute;
     left: 0px;
     top: -5px;
@@ -506,89 +514,108 @@ window.mainUtilFn = function() {
     left: 0;
     color: white;
 ">AoA:</div><img id="aoa-img" style="position: absolute; right: 0;" src="https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png">`;
-                const c = document.getElementById("aoa-container");
-                function inRange(val, low, high) {
-                    return ((val >= low) && (val <= high)) ? true : false;
+                    const c = document.getElementById("aoa-container");
+                    function inRange(val, low, high) {
+                        return ((val >= low) && (val <= high)) ? true : false;
+                    }
+
+                    setInterval(() => {
+                        c.style.display = (window.instruments.visible) ? 'block' : 'none';
+                        window.uAoA = -window.geofs.animation.values.atilt-(Math.atan((window.geofs.animation.values.verticalSpeed*0.00987473)/window.geofs.animation.values.groundSpeedKnt)*window.RAD_TO_DEGREES);
+                        document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
+                        let i = document.getElementById("aoa-img");
+                        let blue = aoaLookup(Number(window.geofs.aircraft.instance.id));
+                        let crit = (window.geofs.aircraft.instance.airfoils[2] && window.geofs.aircraft.instance.airfoils[2].stallIncidence);
+                        if (!window.geofs.aircraft.instance.engine.on) {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
+                        } else if (inRange(window.uAoA, 0, blue/2)) {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa1.png";
+                        } else if (inRange(window.uAoA, blue/2, blue)) {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa2.png";
+                        } else if (inRange(window.uAoA, blue, blue+1)) {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa3.png";
+                        } else if (inRange(window.uAoA, blue+1, blue+2)) {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa4.png";
+                        } else if (window.uAoA > blue+2) {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa5.png";
+                        } else {
+                            i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
+                        }
+                    }, 50);
+
+                    document.getElementById("aoa-dragger").addEventListener('mousedown', function(e) {
+                        let offsetX = e.clientX - c.getBoundingClientRect().left;
+                        let offsetY = e.clientY - c.getBoundingClientRect().top;
+
+                        function mouseMoveHandler(e) {
+                            c.style.left = `${e.clientX - offsetX}px`;
+                            c.style.top = `${e.clientY - offsetY}px`;
+                        }
+
+                        function mouseUpHandler() {
+                            document.removeEventListener('mousemove', mouseMoveHandler);
+                            document.removeEventListener('mouseup', mouseUpHandler);
+                            localStorage.setItem("utilsAoALeft", c.style.left);
+                            localStorage.setItem("utilsAoATop", c.style.top);
+                        }
+
+                        document.addEventListener('mousemove', mouseMoveHandler);
+                        document.addEventListener('mouseup', mouseUpHandler);
+                    });
                 }
-
-                setInterval(() => {
-                    c.style.display = (window.instruments.visible) ? 'block' : 'none';
-                    window.uAoA = -window.geofs.animation.values.atilt-(Math.atan((window.geofs.animation.values.verticalSpeed*0.00987473)/window.geofs.animation.values.groundSpeedKnt)*window.RAD_TO_DEGREES);
-                    document.getElementById("AoA-Div").innerHTML = "AoA: " + Math.round(window.uAoA*10)/10;
-                    let i = document.getElementById("aoa-img");
-                    let blue = aoaLookup(Number(window.geofs.aircraft.instance.id));
-                    let crit = (window.geofs.aircraft.instance.airfoils[2] && window.geofs.aircraft.instance.airfoils[2].stallIncidence);
-                    if (!window.geofs.aircraft.instance.engine.on) {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
-                    } else if (inRange(window.uAoA, 0, blue/2)) {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa1.png";
-                    } else if (inRange(window.uAoA, blue/2, blue)) {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa2.png";
-                    } else if (inRange(window.uAoA, blue, blue+1)) {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa3.png";
-                    } else if (inRange(window.uAoA, blue+1, blue+2)) {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa4.png";
-                    } else if (window.uAoA > blue+2) {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa5.png";
-                    } else {
-                        i.src = "https://tylerbmusic.github.io/GPWS-files_geofs/aoa0.png";
-                    }
-                }, 50);
-
-                document.getElementById("aoa-dragger").addEventListener('mousedown', function(e) {
-                    let offsetX = e.clientX - c.getBoundingClientRect().left;
-                    let offsetY = e.clientY - c.getBoundingClientRect().top;
-
-                    function mouseMoveHandler(e) {
-                        c.style.left = `${e.clientX - offsetX}px`;
-                        c.style.top = `${e.clientY - offsetY}px`;
-                    }
-
-                    function mouseUpHandler() {
-                        document.removeEventListener('mousemove', mouseMoveHandler);
-                        document.removeEventListener('mouseup', mouseUpHandler);
-                        localStorage.setItem("utilsAoALeft", c.style.left);
-                        localStorage.setItem("utilsAoATop", c.style.top);
-                    }
-
-                    document.addEventListener('mousemove', mouseMoveHandler);
-                    document.addEventListener('mouseup', mouseUpHandler);
-                });
             }
-        }
-        if (!window.isCamReset && localStorage.getItem("utilsCamReset") == 'true') {
-            window.isCamReset = true;
-            document.getElementById("geofs-ui-3dview").addEventListener('mouseup', window.utilsCameraTick);
-        } else if (window.isCamReset && localStorage.getItem("utilsCamReset") == 'false') {
-            document.getElementById("geofs-ui-3dview").removeEventListener('mouseup',window.utilsCameraTick);
-        }
-        if (!window.mouselessListener && window.geofs.camera.isHandlingMouseRotation() && localStorage.getItem("utilsMouseless") == "true" && localStorage.getItem("utilsCamReset") == "false") { //Activate "Mouseless" mode. Also, Cam Reset being enabled may (or may not) cause unexpected things to happen.
-            window.controls.mouse.down = 1;
-            window.mouselessListener = true;
-            document.body.addEventListener('mousemove', window.utilsMouseless);
-        } else if (window.mouselessListener && (!window.geofs.camera.isHandlingMouseRotation() || localStorage.getItem("utilsMouseless") == "false" || localStorage.getItem("utilsCamReset") == "true")) { //Deactivate "Mouseless" mode.
-            if (window.mouselessTimeout) {
-                clearTimeout(window.mouselessTimeout);
-                window.mouselessTimeout = null;
+            if (!window.isCamReset && localStorage.getItem("utilsCamReset") == 'true') {
+                window.isCamReset = true;
+                document.getElementById("geofs-ui-3dview").addEventListener('mouseup', window.utilsCameraTick);
+            } else if (window.isCamReset && localStorage.getItem("utilsCamReset") == 'false') {
+                document.getElementById("geofs-ui-3dview").removeEventListener('mouseup',window.utilsCameraTick);
             }
-            window.controls.mouse.down = false;
-            document.body.removeEventListener('mousemove', window.utilsMouseless);
-            window.mouselessListener = false;
-        }
-    }, 100);
-    function autoBrakes() {
-        if ((localStorage.getItem("utilsArmed") == "true") && window.geofs.cautiousWithTerrain == false && window.autoBrakes && (window.geofs.animation.values.groundContact && !window.wasGrounded)) { //Auto brakes
-            if (localStorage.getItem("utilsRtEnabled") == 'true') {
-                window.controls.throttle = -1;
+            if (!window.mouselessListener && window.geofs.camera.isHandlingMouseRotation() && localStorage.getItem("utilsMouseless") == "true" && localStorage.getItem("utilsCamReset") == "false") { //Activate "Mouseless" mode. Also, Cam Reset being enabled may (or may not) cause unexpected things to happen.
+                window.controls.mouse.down = 1;
+                window.mouselessListener = true;
+                document.body.addEventListener('mousemove', window.utilsMouseless);
+            } else if (window.mouselessListener && (!window.geofs.camera.isHandlingMouseRotation() || localStorage.getItem("utilsMouseless") == "false" || localStorage.getItem("utilsCamReset") == "true")) { //Deactivate "Mouseless" mode.
+                if (window.mouselessTimeout) {
+                    clearTimeout(window.mouselessTimeout);
+                    window.mouselessTimeout = null;
+                }
+                window.controls.mouse.down = false;
+                document.body.removeEventListener('mousemove', window.utilsMouseless);
+                window.mouselessListener = false;
             }
-            if (localStorage.getItem("utilsSpEnabled") == 'true') {
-                window.controls.airbrakes.target = 1;
-                window.controls.airbrakes.delta = 0.5;
+        }, 100);
+        function autoBrakes() {
+            /*
+        <div id="utils-ab" class="geofs-inline-overlay geofs-textOverlay control-pad geofs-visible geofs-manipulator" style="width: 50px;height: 40px;"><div class="geofs-overlay geofs-textOverlay control-pad-dyn-label geofs-visible" style="width: 50px;height: 40px;">AUTO BRK</div></div>
+        */
+            if (localStorage.getItem("utilsAB-CP") == "true" && !document.getElementById("utils-ab")) {
+                var abcp = document.createElement('div');
+                abcp.id = 'utils-ab';
+                abcp.className = "geofs-inline-overlay geofs-textOverlay control-pad geofs-visible geofs-manipulator";
+                abcp.style.width = "50px";
+                abcp.style.height = "40px";
+                abcp.style.backgroundColor = (localStorage.getItem("utilsArmed") == "true") ? 'orange' : '#000';
+                document.getElementsByClassName("geofs-pads-container")[0].prepend(abcp);
+                abcp.innerHTML = `<div class="geofs-overlay geofs-textOverlay control-pad-dyn-label geofs-visible" style="width: 50px;height: 40px;">AUTO BRK</div>`;
+                abcp.addEventListener('click', spArm);
+            } else if (localStorage.getItem("utilsAB-CP") == "false" && document.getElementById("utils-ab")) {
+                document.getElementById('utils-ab').remove();
             }
-            window.controls.brakes = 1;
-            localStorage.setItem("utilsArmed", "false");
+            if ((localStorage.getItem("utilsArmed") == "true") && window.geofs.cautiousWithTerrain == false && window.autoBrakes && (window.geofs.animation.values.groundContact && !window.wasGrounded)) { //Auto brakes
+                if (localStorage.getItem("utilsRtEnabled") == 'true') {
+                    window.controls.throttle = -1;
+                }
+                if (localStorage.getItem("utilsSpEnabled") == 'true') {
+                    window.controls.airbrakes.target = 1;
+                    window.controls.airbrakes.delta = 0.5;
+                }
+                if (localStorage.getItem("utilsBkEnabled") == 'true') {
+                    window.controls.brakes = 1;
+                }
+                spArm();
+            }
+            window.wasGrounded = window.geofs.animation.values.groundContact;
         }
-        window.wasGrounded = window.geofs.animation.values.groundContact;
-    }
-    setInterval(autoBrakes, 30);
-};
+        setInterval(autoBrakes, 30);
+    };
+})();
