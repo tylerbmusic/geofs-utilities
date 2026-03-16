@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.7
-// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, GTAIV, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, an AoA meter, and some camera enhancements.
+// @version      0.8
+// @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, GTAIV, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, an AoA meter, flares, and some camera enhancements.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
 // @match        https://*.geo-fs.com/geofs.php*
@@ -93,6 +93,8 @@ function aoaLookup(id) {
     } else afterGMenu()
     function afterGMenu() {
         window.isSmokeOn = false;
+        window.emittingFlares = false;
+        window.flares = [];
         //GMenu stuff
         const utilMenu = new window.GMenu("Utilities", "utils");
         utilMenu.addHeader(2, "Autobrakes");
@@ -108,11 +110,26 @@ function aoaLookup(id) {
         utilMenu.addKBShortcut("Toggle light: ", "Light", 1, "'", light);
         utilMenu.addKBShortcut("Elevator Trim Adjustment: ", "Trim", 1, 'w', trim);
         utilMenu.addKBShortcut("Toggle smoke: ", "Smoke", 1, 'q', toggleSmoke);
+        utilMenu.addKBShortcut("Shoot flares: ", "Flares", 1, '`', emitFlares, stopFlares);
         utilMenu.addHeader(2, "Smoke Settings");
         utilMenu.addItem("Color: ", "Color", "color", 1, "#ffffff");
         utilMenu.addItem("Smoke Start Size: ", "SmokeStart", "number", 1, "0.003");
         utilMenu.addItem("Smoke End Size: ", "SmokeEnd", "number", 1, "0.4");
         utilMenu.addItem("Smoke life span (seconds): ", "SLife", "number", 1, "60");
+        utilMenu.addHeader(2, "Flares settings");
+        utilMenu.addItem("Color: ", "FColor", "color", 1, "#ffffff");
+        utilMenu.addItem("Flare life span (seconds): ", "FLife", "number", 1, "3");
+        utilMenu.addItem("Fire rate (flares/sec): ", "FRate", "number", 1, "40");
+        utilMenu.addItem("Flare size: ", "FSize", "number", 1, "1");
+        utilMenu.addItem("Shoot left flare: ", "FLeft", "checkbox", 1, "true");
+        utilMenu.addItem("Shoot right flare: ", "FRight", "checkbox", 1, "true");
+        utilMenu.addItem("Shoot downward flare: ", "FCenter", "checkbox", 1, "true");
+        utilMenu.addItem("Shoot upward flare: ", "FUp", "checkbox", 1, "false");
+        utilMenu.addItem("Drag coefficient: ", "FlrDrg", "number", 1, "0.02");
+        utilMenu.addItem("Drag coefficient randomness: ", "FDrgRdm", "number", 1, "0.01");
+        utilMenu.addItem("Smoke trail opacity: ", "FSmokeOpacity", "number", 1, "0.1");
+        utilMenu.addButton("Load preset: AC-130", window.fLoadAC130, "onclick='window.fLoadAC130()'");
+        utilMenu.addButton("Load preset: F-18", window.fLoadF22, "onclick='window.fLoadF22()'");
         utilMenu.addHeader(2, "G-Force & AoA Meter");
         utilMenu.addItem("Show G-Force Meter: ", "ShowGs", "checkbox", 1, 'false');
         utilMenu.addItem("Show AoA Meter: ", "ShowAoA", "checkbox", 1, 'false');
@@ -129,7 +146,7 @@ function aoaLookup(id) {
             let NAME = "Utilities";
             let SPACEDNAME = "Utilities";
             let LSNAME = "utils";
-            let VERSION = "0.7";
+            let VERSION = "0.8";
             let URL = "https://github.com/tylerbmusic/geofs-utilities";
             let a = await fetch('https://tylerbmusic.github.io/versions.json?t=' + Date.now());
             let b = await a.text();
@@ -190,6 +207,140 @@ function aoaLookup(id) {
     waitForEntities();
     window.smokeParticles = [];
 
+    function scale(e, t) {
+        return [e[0] * t, e[1] * t, e[2] * t]
+    }
+    function multiplyV(e, t) {
+        var a = t[0]
+        , o = t[1]
+        , n = t[2]
+        , r = e[0]
+        , s = e[1]
+        , c = e[2];
+        return [r[0] * a + r[1] * o + r[2] * n, s[0] * a + s[1] * o + s[2] * n, c[0] * a + c[1] * o + c[2] * n]
+    }
+    function add(e, t) {
+        return [e[0] + t[0], e[1] + t[1], e[2] + t[2]]
+    }
+    function hexToRgb(hex) {
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+    window.createFlare = function(life = 5000, vel = [(Math.random() > 0.5) ? 35: -35, Math.random()*10, -25], gravity = -9.8, position = [Math.sin(window.geofs.animation.values.heading360*window.DEGREES_TO_RAD), Math.cos(window.geofs.animation.values.heading360*window.DEGREES_TO_RAD), 0]) {
+        let endTime = Date.now() + life + Math.random()*1000;
+        let startTime = Date.now();
+        let flare = new window.geofs.api.billboard(
+            [...window.geofs.aircraft.instance.llaLocation],
+            "images/lights/yellowflare.png",
+            {
+                scale: 0,
+                opacity: 1
+            }
+        );
+        let c = hexToRgb(localStorage.getItem("utilsFColor")); //c for Color
+        flare._billboard.color = new window.Cesium.Color(c.r/255, c.g/255, c.b/255, 1);
+        let smoke = new window.geofs.fx.ParticleEmitter({
+            off: 0,
+            location: window.geofs.aircraft.instance.llaLocation,
+            duration: 1E10,
+            rate: 0.1,
+            life: life,
+            startScale: 0.003,
+            endScale: 0.1,
+            randomizeStartScale: 0.002,
+            randomizeEndScale: 0.05,
+            startOpacity: Number(localStorage.getItem("utilsFSmokeOpacity")),
+            endOpacity: 0.01,
+            startRotation: "random",
+            texture: "darkSmoke",
+        });
+        let hdgRot = M33.identity();
+        hdgRot = M33.rotationZ(hdgRot, window.geofs.aircraft.instance.object3d.htr[0]*window.DEGREES_TO_RAD); //Heading
+        hdgRot = M33.rotationY(hdgRot, window.geofs.aircraft.instance.object3d.htr[1]*window.DEGREES_TO_RAD); //Pitch/tilt
+        hdgRot = M33.rotationX(hdgRot, -window.geofs.aircraft.instance.object3d.htr[2]*window.DEGREES_TO_RAD); //Roll
+        vel = multiplyV(hdgRot, vel);
+        let origLLA = window.geofs.aircraft.instance.llaLocation;
+        let oVel = window.geofs.aircraft.instance.velocityScalar;
+        let v = window.geofs.aircraft.instance.velocity;
+        vel = add(vel, v);
+        window.flares.push({
+            flare: flare,
+            smoke: smoke,
+            boundingSphere: new window.Cesium.BoundingSphere(window.Cesium.Cartesian3.fromDegrees(origLLA[1], origLLA[0], origLLA[2]), 1),
+            startTime: startTime,
+            endTime: endTime,
+            origLLA: origLLA,
+            vel: vel,
+            gravity: gravity,
+            position: position,
+            dragRdm: [Number(localStorage.getItem("utilsFDrgRdm"))*Math.random(), Number(localStorage.getItem("utilsFDrgRdm"))*Math.random()]
+        });
+    }
+    function emitFlares(speed = 1) {
+        if (!window.emittingFlares && localStorage.getItem("utilsEnabled") == 'true') {
+            window.emittingFlares = true;
+            let doRight = window.gmenu.get("utils", "FRight");
+            let doLeft = window.gmenu.get("utils", "FLeft");
+            let doCenter = window.gmenu.get("utils", "FCenter");
+            let doUp = window.gmenu.get("utils", "FUp");
+            let num = Number(doRight) + Number(doLeft) + Number(doCenter) + Number(doUp);
+            let time = (1000/Number(localStorage.getItem("utilsFRate")))*num;
+            let life = 1000*Number(localStorage.getItem("utilsFLife"));
+            let nextTime = Date.now();
+            let startTime = Date.now();
+            function doFlare() {
+                if (window.emittingFlares && Date.now() >= nextTime) {
+                    doRight && window.createFlare(life/speed, scale([25 + 25*Math.random(), /*(Math.random()*80)*/0, 0], speed)); //Right
+                    doLeft && window.createFlare(life/speed, scale([-25 - 25*Math.random(), /*(Math.random()*80)*/0, 0], speed)); //Left
+                    let rand = Math.random();
+                    doCenter && window.createFlare(life/speed, scale([Math.random()*10 - 5, 0, -33], speed)); //Center
+                    doUp && window.createFlare(life/speed, scale([30, Math.random()*100, 100], speed)); //Up
+                    nextTime = Date.now() + time/2 + (time*Math.random());
+                    requestAnimationFrame(doFlare);
+                } else if (window.emittingFlares) {
+                    requestAnimationFrame(doFlare);
+                }
+            }
+            requestAnimationFrame(doFlare);
+        }
+    }
+    function stopFlares() {
+        window.emittingFlares = false;
+    }
+    window.fLoadAC130 = function() {
+        window.gmenu.toggleMenu();
+        localStorage.setItem("utilsFColor", "#ffda8a");
+        localStorage.setItem("utilsFLife", "3");
+        localStorage.setItem("utilsFRate", "40");
+        localStorage.setItem("utilsFSize", "1");
+        localStorage.setItem("utilsFLeft", "true");
+        localStorage.setItem("utilsFRight", "true");
+        localStorage.setItem("utilsFCenter", "true");
+        localStorage.setItem("utilsFUp", "false");
+        localStorage.setItem("utilsFlrDrg", "0.02");
+        localStorage.setItem("utilsFDrgRdm", "0.01");
+        localStorage.setItem("utilsFSmokeOpacity", "0.1");
+        window.gmenu.toggleMenu();
+    }
+    window.fLoadF22 = function() {
+        window.gmenu.toggleMenu();
+        localStorage.setItem("utilsFColor", "#ffda8a");
+        localStorage.setItem("utilsFLife", "3");
+        localStorage.setItem("utilsFRate", "5");
+        localStorage.setItem("utilsFSize", "2");
+        localStorage.setItem("utilsFLeft", "false");
+        localStorage.setItem("utilsFRight", "false");
+        localStorage.setItem("utilsFCenter", "true");
+        localStorage.setItem("utilsFUp", "false");
+        localStorage.setItem("utilsFlrDrg", "0.01");
+        localStorage.setItem("utilsFDrgRdm", "0.01");
+        localStorage.setItem("utilsFSmokeOpacity", "1.0");
+        window.gmenu.toggleMenu();
+    }
     function spArm() {
         if ((localStorage.getItem("utilsEnabled") == 'true')) {
             if (localStorage.getItem("utilsArmed") == "true") {
@@ -269,14 +420,6 @@ function aoaLookup(id) {
                     startRotation: "random",
                     texture: "whitesmoke"
                 });
-                function hexToRgb(hex) {
-                    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-                    return result ? {
-                        r: parseInt(result[1], 16),
-                        g: parseInt(result[2], 16),
-                        b: parseInt(result[3], 16)
-                    } : null;
-                }
                 let c = hexToRgb(localStorage.getItem("utilsColor")); //c for Color
                 window.smokeParticles.push([window.smoke, new window.Cesium.Color(c.r/255, c.g/255, c.b/255, 1), 0]);
                 console.log("window.smokeParticles: ");
@@ -360,7 +503,11 @@ function aoaLookup(id) {
             window.mouselessTimeout = setTimeout(window.utilsCameraTick, Number(localStorage.getItem("utilsMouselessDelay"))*1000);
         }
     };
-
+    function metersPerPixel(distanceMeters, fovDegrees, screenWidthPixels) {
+        const fovRadians = fovDegrees * Math.PI / 180;
+        const visibleWidthMeters = 2 * distanceMeters * Math.tan(fovRadians / 2);
+        return visibleWidthMeters / screenWidthPixels;
+    }
     window.mainUtilFn = function() {
         'use strict';
         window.isLightOn = false;
@@ -373,6 +520,40 @@ function aoaLookup(id) {
         window.utilsCameraTicking = false;
         window.mouselessTimeout = null;
         window.mouselessListener = false;
+        let lastTime = Date.now();
+        let flareInterval = function() {
+            for (let f = window.flares.length - 1; f >= 0; f--) {
+                let flr = window.flares[f];
+                if (Date.now() > flr.endTime) {
+                    flr.flare.destroy();
+                    flr.smoke.destroy();
+                    window.flares.splice(f, 1);
+                } else {
+                    let fac = (Date.now() - flr.startTime) / (flr.endTime - flr.startTime);
+                    let dt = (Date.now() - lastTime)/1000;
+                    let oLla = window.geofs.aircraft.instance.llaLocation;
+                    let speed = Math.sqrt(flr.vel[0]**2 + flr.vel[1]**2 + flr.vel[2]**2);
+                    let dragFactor = 0.5 * 1.225 * (flr.dragRdm[0] + Number(localStorage.getItem("utilsFlrDrg")));
+                    let dragForce = speed * speed * dragFactor;
+                    flr.vel[0] -= (flr.vel[0] / speed) * dragForce * dt;
+                    flr.vel[1] -= (flr.vel[1] / speed) * dragForce * dt;
+                    flr.vel[2] -= ((flr.vel[2] / speed) * dragForce * dt) - (flr.gravity * dt);
+                    let dPos = scale(flr.vel, dt); //Calculate position delta
+                    //let bLla = multiplyV(flr.hdgRot, [dPos[1], dPos[0], dPos[2]]);
+                    //flr.position = add(flr.position, [bLla[1], bLla[0], bLla[2]]);
+                    flr.position = add(flr.position, [dPos[0], dPos[1], dPos[2]]);
+                    let loc = add(flr.origLLA, window.geofs.api.xyz2lla(flr.position, flr.origLLA));
+                    flr.smoke._options.location = loc;
+                    flr.flare.setLocation(loc);
+                    flr.flare._billboard.color.alpha = 1-Math.pow(fac, 4);
+                    flr.boundingSphere.center = window.Cesium.Cartesian3.fromDegrees(loc[1], loc[0], loc[2]);
+                    flr.flare._billboard.scale = Number(localStorage.getItem("utilsFSize"))*(1/Math.max(0.01,window.geofs.camera.cam.getPixelSize(flr.boundingSphere, window.geofs.api.viewer.canvas.width, window.geofs.api.viewer.canvas.height)))*(1-Math.pow(fac, 4))/10;
+                }
+            }
+            lastTime = Date.now();
+        };
+        window.geofs.api.addFrameCallback(flareInterval)
+
         var s = setInterval(() => {
             if (localStorage.getItem("utilsShowGs") == 'true' && (!window.instruments.list.gmeter)) {
                 var theUrl = 'https://tylerbmusic.github.io/GPWS-files_geofs/gmeter.png';
