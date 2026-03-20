@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         GeoFS Utilities
-// @version      0.8
+// @version      0.8.1
 // @description  Adds various suggestions by bili-開飛機のzm, VR PoZz, bluga4893, GTAIV, and suggestions by discord users (idk who): 10 spoiler positions, a light that you could pretend is a landing light, autobrakes, a key to make the elevator trim match the aileron pitch, smoke, a G-Force Meter, an AoA meter, flares, and some camera enhancements.
 // @author       GGamerGGuy
 // @match        https://www.geo-fs.com/geofs.php?v=*
@@ -146,7 +146,7 @@ function aoaLookup(id) {
             let NAME = "Utilities";
             let SPACEDNAME = "Utilities";
             let LSNAME = "utils";
-            let VERSION = "0.8";
+            let VERSION = "0.8.1";
             let URL = "https://github.com/tylerbmusic/geofs-utilities";
             let a = await fetch('https://tylerbmusic.github.io/versions.json?t=' + Date.now());
             let b = await a.text();
@@ -230,11 +230,11 @@ function aoaLookup(id) {
             b: parseInt(result[3], 16)
         } : null;
     }
-    window.createFlare = function(life = 5000, vel = [(Math.random() > 0.5) ? 35: -35, Math.random()*10, -25], gravity = -9.8, position = [Math.sin(window.geofs.animation.values.heading360*window.DEGREES_TO_RAD), Math.cos(window.geofs.animation.values.heading360*window.DEGREES_TO_RAD), 0]) {
+    window.createFlare = function(life = 5000, vel = [(Math.random() > 0.5) ? 35: -35, Math.random()*10, -25], gravity = -9.8, position = [Math.sin(window.geofs.animation.values.heading360*window.DEGREES_TO_RAD), Math.cos(window.geofs.animation.values.heading360*window.DEGREES_TO_RAD), 0], origLLA = window.geofs.aircraft.instance.llaLocation, htr = window.geofs.aircraft.instance.object3d.htr, v = window.geofs.aircraft.instance.velocity) {
         let endTime = Date.now() + life + Math.random()*1000;
         let startTime = Date.now();
         let flare = new window.geofs.api.billboard(
-            [...window.geofs.aircraft.instance.llaLocation],
+            [...origLLA],
             "images/lights/yellowflare.png",
             {
                 scale: 0,
@@ -245,7 +245,7 @@ function aoaLookup(id) {
         flare._billboard.color = new window.Cesium.Color(c.r/255, c.g/255, c.b/255, 1);
         let smoke = new window.geofs.fx.ParticleEmitter({
             off: 0,
-            location: window.geofs.aircraft.instance.llaLocation,
+            location: origLLA,
             duration: 1E10,
             rate: 0.1,
             life: life,
@@ -259,13 +259,10 @@ function aoaLookup(id) {
             texture: "darkSmoke",
         });
         let hdgRot = M33.identity();
-        hdgRot = M33.rotationZ(hdgRot, window.geofs.aircraft.instance.object3d.htr[0]*window.DEGREES_TO_RAD); //Heading
-        hdgRot = M33.rotationY(hdgRot, window.geofs.aircraft.instance.object3d.htr[1]*window.DEGREES_TO_RAD); //Pitch/tilt
-        hdgRot = M33.rotationX(hdgRot, -window.geofs.aircraft.instance.object3d.htr[2]*window.DEGREES_TO_RAD); //Roll
+        hdgRot = M33.rotationZ(hdgRot, htr[0]*window.DEGREES_TO_RAD); //Heading
+        hdgRot = M33.rotationY(hdgRot, htr[1]*window.DEGREES_TO_RAD); //Pitch/tilt
+        hdgRot = M33.rotationX(hdgRot, -htr[2]*window.DEGREES_TO_RAD); //Roll
         vel = multiplyV(hdgRot, vel);
-        let origLLA = window.geofs.aircraft.instance.llaLocation;
-        let oVel = window.geofs.aircraft.instance.velocityScalar;
-        let v = window.geofs.aircraft.instance.velocity;
         vel = add(vel, v);
         window.flares.push({
             flare: flare,
@@ -400,7 +397,6 @@ function aoaLookup(id) {
         }
     }
     function toggleSmoke() {
-        console.log("toggleSmoke");
         if ((localStorage.getItem("utilsEnabled") == 'true')) {
             if (window.isSmokeOn == false) {
                 window.isSmokeOn = true;
@@ -422,8 +418,6 @@ function aoaLookup(id) {
                 });
                 let c = hexToRgb(localStorage.getItem("utilsColor")); //c for Color
                 window.smokeParticles.push([window.smoke, new window.Cesium.Color(c.r/255, c.g/255, c.b/255, 1), 0]);
-                console.log("window.smokeParticles: ");
-                console.log(window.smokeParticles);
                 if (window.smokeColor) {
                     clearInterval(window.smokeColor);
                 }
@@ -439,7 +433,6 @@ function aoaLookup(id) {
                             }
                         }
                         if (!stillExists) {
-                            console.log("doesn't still exist");
                             window.smokeParticles[p][2]++;
                             if (window.smokeParticles[p][2] > 3) {
                                 window.smokeParticles.splice(p, 1); //Remove the smoke particleEmitter if it has no particles.
@@ -456,7 +449,6 @@ function aoaLookup(id) {
 
     window.utilsCameraTick = function() {
         if (window.geofs.camera.currentMode != 5) {
-            console.log("utilsCameraTick");
             window.mouselessTimeout = null;
             window.utilsCameraTicking = true;
             let time = Number(localStorage.getItem("utilsCamResetTime"))*1000;
@@ -531,7 +523,6 @@ function aoaLookup(id) {
                 } else {
                     let fac = (Date.now() - flr.startTime) / (flr.endTime - flr.startTime);
                     let dt = (Date.now() - lastTime)/1000;
-                    let oLla = window.geofs.aircraft.instance.llaLocation;
                     let speed = Math.sqrt(flr.vel[0]**2 + flr.vel[1]**2 + flr.vel[2]**2);
                     let dragFactor = 0.5 * 1.225 * (flr.dragRdm[0] + Number(localStorage.getItem("utilsFlrDrg")));
                     let dragForce = speed * speed * dragFactor;
@@ -539,8 +530,6 @@ function aoaLookup(id) {
                     flr.vel[1] -= (flr.vel[1] / speed) * dragForce * dt;
                     flr.vel[2] -= ((flr.vel[2] / speed) * dragForce * dt) - (flr.gravity * dt);
                     let dPos = scale(flr.vel, dt); //Calculate position delta
-                    //let bLla = multiplyV(flr.hdgRot, [dPos[1], dPos[0], dPos[2]]);
-                    //flr.position = add(flr.position, [bLla[1], bLla[0], bLla[2]]);
                     flr.position = add(flr.position, [dPos[0], dPos[1], dPos[2]]);
                     let loc = add(flr.origLLA, window.geofs.api.xyz2lla(flr.position, flr.origLLA));
                     flr.smoke._options.location = loc;
